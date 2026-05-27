@@ -1,0 +1,76 @@
+name: Draft release
+
+on:
+  push:
+    tags:
+      - 'v[0-9]*'
+      - '[0-9]*'
+
+permissions:
+  contents: write
+
+jobs:
+  draft-release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Resolve version
+        id: version
+        run: |
+          TAG="${GITHUB_REF#refs/tags/}"
+          VERSION="${TAG#v}"
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+
+      - name: Verify bl_info version matches tag
+        run: |
+          BL_INFO_VERSION=$(python3 -c "
+          import ast, sys
+          with open('__init__.py') as f:
+              tree = ast.parse(f.read())
+          for node in ast.walk(tree):
+              if isinstance(node, ast.Assign) and any(t.id == 'bl_info' for t in node.targets if isinstance(t, ast.Name)):
+                  for k, v in zip(node.value.keys, node.value.values):
+                      if isinstance(k, ast.Constant) and k.value == 'version':
+                          print('.'.join(str(elt.value) for elt in v.elts))
+                          sys.exit(0)
+          sys.exit('bl_info.version not found')
+          ")
+          echo "bl_info version: $BL_INFO_VERSION"
+          echo "tag version:     ${{ steps.version.outputs.version }}"
+          if [ "$BL_INFO_VERSION" != "${{ steps.version.outputs.version }}" ]; then
+            echo "::error::bl_info version ($BL_INFO_VERSION) does not match release tag (${{ steps.version.outputs.version }}). Bump bl_info.version in __init__.py before tagging."
+            exit 1
+          fi
+
+      - name: Build addon zip
+        run: |
+          STAGE_DIR="cats-blender-plugin"
+          ZIP_NAME="cats-blender-plugin-${{ steps.version.outputs.version }}.zip"
+          rm -rf "$STAGE_DIR"
+          mkdir -p "$STAGE_DIR"
+          rsync -a \
+            --exclude='.git' \
+            --exclude='.github' \
+            --exclude='.gitignore' \
+            --exclude='.travis.yml' \
+            --exclude='__pycache__' \
+            --exclude='*.pyc' \
+            --exclude='cats-blender-plugin' \
+            --exclude='docs' \
+            --exclude='tests' \
+            ./ "$STAGE_DIR/"
+          zip -r "$ZIP_NAME" "$STAGE_DIR"
+          echo "zip=$ZIP_NAME" >> "$GITHUB_ENV"
+          unzip -l "$ZIP_NAME" | head -40
+
+      - name: Draft release
+        uses: softprops/action-gh-release@v2
+        with:
+          draft: true
+          name: "Cats Blender Plugin ${{ steps.version.outputs.version }}"
+          tag_name: ${{ steps.version.outputs.tag }}
+          generate_release_notes: true
+          files: ${{ env.zip }}
