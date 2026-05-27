@@ -1,8 +1,16 @@
 # Changelog
 
-## Unreleased (this fork)
+## 0.20.0 — 2026-05-27 (this fork)
 
 Compatibility work for Blender 4.0–4.2 LTS. Original upstream targets 2.93.
+
+- Added `.github/workflows/release.yml`: tag pushes (`v0.20.0` or bare `0.20.0`) build a zipped addon and draft a GitHub release with auto-generated notes. The workflow verifies that the tag matches `bl_info['version']` before building.
+- Added `tools/common.iter_objects()` that filters None entries from `view_layer.objects`. Converted `unselect_all`, `remove_unused_objects`, and `remove_no_user_objects` to use it. The `select()` None guard stays as defense-in-depth.
+- Restructured `tools/bake.py` `swap_links` to fall back to a per-operator `_parked_inputs` dict when the scratch socket is missing on this Blender version (e.g. `"Transmission Roughness"`, removed in 4.0). Without this, the paired forward/reverse swap silently no-ops while the in-between `set_values` still mutates the primary socket, permanently corrupting Metallic/Specular values on every alpha/metallic/smoothness bake.
+- Added `'Anisotropic'` to the Principled BSDF candidate map so the bake's anisotropic-rotation parking still resolves on Blender 4.0+ regardless of which naming variant ships.
+- Narrowed the `except (TypeError, AttributeError)` in the bake-material default-copy block to `except TypeError` (the AttributeError branch was unreachable after the explicit None check), and added a debug log so type-mismatch skips are visible during debugging.
+- Snapshot `pose.bone_groups` via `list()` before the remove loop in Fix Model. Iterating a `bpy_prop_collection` while calling `.remove()` on it skips every other entry; previously up to half the groups were left behind on Blender 2.93–3.x.
+- Filter out None emission sockets in autodetect_passes and guard `tree.links.new` when `_get_emission_input` returns None.
 
 - Filter `WindowManager.addon_support` to enum's valid identifiers (`TESTING` removed in 4.2).
 - Principled BSDF input renames (4.0): added shared `get_principled_input` / `set_principled_input` helpers in `tools/common.py` covering `Emission` → `Emission Color`, `Specular` → `Specular IOR Level`, `Clearcoat*` → `Coat*`, `Transmission` → `Transmission Weight`, `Sheen Tint` → `Sheen Weight`, `Subsurface` → `Subsurface Weight`. Routed `bake.py` `swap_links` / `set_values` / `_get_emission_input` and `common.py` `combine_mats` / `add_principled_shader` through the helpers. Sites missing on the current Blender version are skipped silently.
