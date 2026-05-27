@@ -34,7 +34,7 @@ from .translations import t
 
 def _get_emission_input(node):
     # Blender 4.0 split the Principled BSDF "Emission" input into "Emission Color" + "Emission Strength".
-    return node.inputs.get("Emission Color") or node.inputs["Emission"]
+    return Common.get_principled_input(node, 'Emission')
 
 
 @register_wrap
@@ -188,30 +188,36 @@ class BakeButton(bpy.types.Operator):
                     tree = slot.material.node_tree
                     for node in tree.nodes:
                         if node.type == "BSDF_PRINCIPLED":
-                            dv1 = node.inputs[input1].default_value
-                            dv2 = node.inputs[input2].default_value
-                            node.inputs[input2].default_value = dv1
-                            node.inputs[input1].default_value = dv2
+                            # Resolve through the 4.0 rename map; skip if either socket no longer
+                            # exists on this Blender version (e.g. Transmission Roughness, removed in 4.0).
+                            sock1 = Common.get_principled_input(node, input1)
+                            sock2 = Common.get_principled_input(node, input2)
+                            if sock1 is None or sock2 is None:
+                                continue
+                            dv1 = sock1.default_value
+                            dv2 = sock2.default_value
+                            sock2.default_value = dv1
+                            sock1.default_value = dv2
 
                             alpha_input = None
-                            if node.inputs[input1].is_linked:
-                                alpha_input = node.inputs[input1].links[0].from_socket
-                                tree.links.remove(node.inputs[input1].links[0])
+                            if sock1.is_linked:
+                                alpha_input = sock1.links[0].from_socket
+                                tree.links.remove(sock1.links[0])
 
                             color_input = None
-                            if node.inputs[input2].is_linked:
-                                color_input = node.inputs[input2].links[0].from_socket
-                                tree.links.remove(node.inputs[input2].links[0])
+                            if sock2.is_linked:
+                                color_input = sock2.links[0].from_socket
+                                tree.links.remove(sock2.links[0])
 
                             if color_input:
-                                tree.links.new(node.inputs[input1], color_input)
+                                tree.links.new(sock1, color_input)
 
                             if alpha_input:
-                                tree.links.new(node.inputs[input2], alpha_input)
+                                tree.links.new(sock2, alpha_input)
 
     def set_values(self, objects, input_name, input_value):
         already_set = set()
-        # Find all Principled BSDF. Flip values for input1 and input2 (default_value and connection)
+        # Find all Principled BSDF. Set default_value on the named input, resolving 4.0 renames.
         for obj in objects:
             for slot in obj.material_slots:
                 if slot.material:
@@ -222,7 +228,7 @@ class BakeButton(bpy.types.Operator):
                     tree = slot.material.node_tree
                     for node in tree.nodes:
                         if node.type == "BSDF_PRINCIPLED":
-                            node.inputs[input_name].default_value = input_value
+                            Common.set_principled_input(node, input_name, input_value)
 
     # "Bake pass" function. Run a single bake to "<bake_name>.png" against all selected objects.
     def bake_pass(self, context, bake_name, bake_type, bake_pass_filter, objects, bake_size, bake_samples, bake_ray_distance, background_color, clear, bake_margin, bake_active=None, bake_multires=False,
@@ -296,7 +302,9 @@ class BakeButton(bpy.types.Operator):
         context.scene.render.bake.use_pass_color = "COLOR" in bake_pass_filter
         context.scene.render.bake.use_pass_diffuse = "DIFFUSE" in bake_pass_filter
         context.scene.render.bake.use_pass_emit = "EMIT" in bake_pass_filter
-        context.scene.render.bake.use_pass_ambient_occlusion = "AO" in bake_pass_filter
+        # Blender 4.0 removed bake.use_pass_ambient_occlusion (AO became its own bake type).
+        if hasattr(context.scene.render.bake, 'use_pass_ambient_occlusion'):
+            context.scene.render.bake.use_pass_ambient_occlusion = "AO" in bake_pass_filter
         if bpy.app.version >= (2, 92, 0):
             context.scene.render.bake.target = "VERTEX_COLORS" if "VERTEX_COLORS" in bake_pass_filter else "IMAGE_TEXTURES"
         context.scene.cycles.samples = bake_samples
@@ -517,7 +525,8 @@ class BakeButton(bpy.types.Operator):
                             Common.switch('EDIT')
                             bpy.ops.mesh.select_all(action='SELECT')
                             bpy.ops.uv.select_all(action='SELECT')
-                            bpy.ops.uv.smart_project(angle_limit=66.0, island_margin=0.01)
+                            # Blender 3.0 switched smart_project's angle_limit from degrees to radians.
+                            bpy.ops.uv.smart_project(angle_limit=math.radians(66.0), island_margin=0.01)
                             Common.switch('OBJECT')
                             child.data.uv_layers.active_index = idx
                     elif uv_overlap_correction == "UNMIRROR":
@@ -918,7 +927,16 @@ class BakeButton(bpy.types.Operator):
         bsdfnode = next(node for node in tree.nodes if node.type == "BSDF_PRINCIPLED")
         if bsdf_original is not None:
             for bsdfinput in bsdfnode.inputs:
-                bsdfinput.default_value = bsdf_original.inputs[bsdfinput.identifier].default_value
+                # Blender 4.0's Principled BSDF v2 added sub-panel sockets (Subsurface/Coat/
+                # Sheen/Transmission Weight etc.) whose identifiers may not exist on the
+                # source node, especially if the source was imported from an older file.
+                src_input = bsdf_original.inputs.get(bsdfinput.identifier)
+                if src_input is None:
+                    continue
+                try:
+                    bsdfinput.default_value = src_input.default_value
+                except (TypeError, AttributeError):
+                    pass
         if pass_normal:
             normaltexnode = tree.nodes.new("ShaderNodeTexImage")
             if use_decimation:
