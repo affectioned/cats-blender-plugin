@@ -75,6 +75,7 @@ _PRINCIPLED_INPUT_CANDIDATES = {
     'Transmission': ('Transmission Weight', 'Transmission'),
     'Emission': ('Emission Color', 'Emission'),
     'Subsurface': ('Subsurface Weight', 'Subsurface'),
+    'Anisotropic': ('Anisotropy', 'Anisotropic'),  # 4.0 BSDF v2 reorganization; either name may exist depending on minor version.
 }
 
 

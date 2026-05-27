@@ -177,7 +177,10 @@ class BakeButton(bpy.types.Operator):
     # Only works between equal data types.
     def swap_links(self, objects, input1, input2):
         already_swapped = set()
-        # Find all Principled BSDF. Flip values for input1 and input2 (default_value and connection)
+        # Find all Principled BSDF. Flip values for input1 and input2 (default_value and connection).
+        # On Blender 4.0+ some scratch sockets used by the bake (notably "Transmission Roughness",
+        # removed in 4.0) no longer exist. In that case fall back to a Python-side parking dict
+        # on self so a paired second swap_links call still restores the primary socket cleanly.
         for obj in objects:
             for slot in obj.material_slots:
                 if slot.material:
@@ -188,12 +191,16 @@ class BakeButton(bpy.types.Operator):
                     tree = slot.material.node_tree
                     for node in tree.nodes:
                         if node.type == "BSDF_PRINCIPLED":
-                            # Resolve through the 4.0 rename map; skip if either socket no longer
-                            # exists on this Blender version (e.g. Transmission Roughness, removed in 4.0).
                             sock1 = Common.get_principled_input(node, input1)
-                            sock2 = Common.get_principled_input(node, input2)
-                            if sock1 is None or sock2 is None:
+                            if sock1 is None:
                                 continue
+                            sock2 = Common.get_principled_input(node, input2)
+                            if sock2 is None:
+                                # Scratch socket gone on this Blender version — park sock1 in a
+                                # side dict; the paired reverse swap_links restores from it.
+                                self._toggle_parked_input(tree, slot.material, node, sock1)
+                                continue
+
                             dv1 = sock1.default_value
                             dv2 = sock2.default_value
                             sock2.default_value = dv1
@@ -214,6 +221,28 @@ class BakeButton(bpy.types.Operator):
 
                             if alpha_input:
                                 tree.links.new(sock2, alpha_input)
+
+    def _toggle_parked_input(self, tree, material, node, sock):
+        # Snapshot-or-restore sock's default_value and incoming link in self._parked_inputs.
+        # First call saves and clears; second call (same key) restores.
+        if not hasattr(self, '_parked_inputs'):
+            self._parked_inputs = {}
+        key = (material.name, node.name, sock.identifier)
+        if key in self._parked_inputs:
+            saved_value, saved_source = self._parked_inputs.pop(key)
+            try:
+                sock.default_value = saved_value
+            except TypeError:
+                pass
+            if saved_source is not None:
+                tree.links.new(sock, saved_source)
+        else:
+            saved_source = None
+            if sock.is_linked:
+                saved_source = sock.links[0].from_socket
+                tree.links.remove(sock.links[0])
+            saved_value = tuple(sock.default_value) if hasattr(sock.default_value, '__iter__') else sock.default_value
+            self._parked_inputs[key] = (saved_value, saved_source)
 
     def set_values(self, objects, input_name, input_value):
         already_set = set()
