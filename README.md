@@ -17,8 +17,8 @@ This fork is being updated to support the modern Blender LTS series. Upstream Ca
 
 | Blender version | Status in this fork |
 |---|---|
-| **4.2 LTS** | Active development — load, import, Fix Model, decimation, eye tracking, visemes, combine materials confirmed; bake & atlas in progress |
-| 3.6 LTS | Not yet retested (expected to work once 4.2 is solid) |
+| **4.2 LTS** | Working — load, import, Fix Model, quick & smart decimation, eye tracking, visemes, combine materials, bake confirmed; atlas, translate, updater popups not yet exercised |
+| 3.6 LTS | Not yet retested (expected to work) |
 | 3.3 LTS | Not yet retested |
 | 2.93 LTS | Last upstream-supported version; should still work |
 
