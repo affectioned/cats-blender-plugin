@@ -62,6 +62,43 @@ def version_2_79_or_older():
     return bpy.app.version < (2, 80)
 
 
+# Blender 4.0 renamed many Principled BSDF inputs (the v2 shader rework). Map each legacy name
+# to a tuple of candidate names ordered newest-first. Look ups must use get_principled_input().
+# A return of None means the input doesn't exist on this Blender version — callers must handle
+# that (typically by skipping the assignment / link).
+_PRINCIPLED_INPUT_CANDIDATES = {
+    'Specular': ('Specular IOR Level', 'Specular'),
+    'Sheen Tint': ('Sheen Weight', 'Sheen Tint'),  # 4.0 split Sheen into Weight (scalar) + Tint (color); use Weight to disable.
+    'Clearcoat': ('Coat Weight', 'Clearcoat'),
+    'Clearcoat Roughness': ('Coat Roughness', 'Clearcoat Roughness'),
+    'Clearcoat Normal': ('Coat Normal', 'Clearcoat Normal'),
+    'Transmission': ('Transmission Weight', 'Transmission'),
+    'Emission': ('Emission Color', 'Emission'),
+    'Subsurface': ('Subsurface Weight', 'Subsurface'),
+}
+
+
+def get_principled_input(node, name):
+    candidates = _PRINCIPLED_INPUT_CANDIDATES.get(name, (name,))
+    for candidate in candidates:
+        sock = node.inputs.get(candidate)
+        if sock is not None:
+            return sock
+    return None
+
+
+def set_principled_input(node, name, value):
+    sock = get_principled_input(node, name)
+    if sock is None:
+        return False
+    try:
+        sock.default_value = value
+    except TypeError:
+        # e.g. scalar assigned to a color socket after a 4.0 rename
+        return False
+    return True
+
+
 def get_objects():
     return bpy.context.scene.objects if version_2_79_or_older() else bpy.context.view_layer.objects
 
@@ -1670,7 +1707,7 @@ class ShowError(bpy.types.Operator):
 
     def invoke(self, context, event):
         dpi_value = Common.get_user_preferences().system.dpi
-        return context.window_manager.invoke_props_dialog(self, width=dpi_value * dpi_scale)
+        return context.window_manager.invoke_props_dialog(self, width=int(dpi_value * dpi_scale))
 
     def draw(self, context):
         if not error or len(error) == 0:
@@ -1888,10 +1925,10 @@ def unify_materials():
                         node_prinipled = nodes.new(type='ShaderNodeBsdfPrincipled')
                         node_prinipled.location = 300, -220
                         node_prinipled.label = 'Cats Emission'
-                        node_prinipled.inputs['Specular'].default_value = 0
+                        set_principled_input(node_prinipled, 'Specular', 0)
                         node_prinipled.inputs['Roughness'].default_value = 0
-                        node_prinipled.inputs['Sheen Tint'].default_value = 0
-                        node_prinipled.inputs['Clearcoat Roughness'].default_value = 0
+                        set_principled_input(node_prinipled, 'Sheen Tint', 0)
+                        set_principled_input(node_prinipled, 'Clearcoat Roughness', 0)
                         node_prinipled.inputs['IOR'].default_value = 0
 
                         # Create Transparency BSDF node
@@ -1976,10 +2013,10 @@ def add_principled_shader(mesh):
             node_prinipled = nodes.new(type='ShaderNodeBsdfPrincipled')
             node_prinipled.label = 'Cats Export Shader'
             node_prinipled.location = principled_shader_pos
-            node_prinipled.inputs['Specular'].default_value = 0
+            set_principled_input(node_prinipled, 'Specular', 0)
             node_prinipled.inputs['Roughness'].default_value = 0
-            node_prinipled.inputs['Sheen Tint'].default_value = 0
-            node_prinipled.inputs['Clearcoat Roughness'].default_value = 0
+            set_principled_input(node_prinipled, 'Sheen Tint', 0)
+            set_principled_input(node_prinipled, 'Clearcoat Roughness', 0)
             node_prinipled.inputs['IOR'].default_value = 0
 
             # Create Output node for correct image exports

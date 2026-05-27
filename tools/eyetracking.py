@@ -157,6 +157,9 @@ class CreateEyesButton(bpy.types.Operator):
         # Create the new eye bones
         new_left_eye = bpy.context.object.data.edit_bones.new('LeftEye')
         new_right_eye = bpy.context.object.data.edit_bones.new('RightEye')
+        # EditBone references go stale the moment we leave edit mode; cache names now.
+        new_left_eye_name = new_left_eye.name
+        new_right_eye_name = new_right_eye.name
 
         # Parent them correctly
         new_left_eye.parent = bpy.context.object.data.edit_bones[context.scene.head]
@@ -234,8 +237,8 @@ class CreateEyesButton(bpy.types.Operator):
             repair_shapekeys_mouth(mesh_name)
             # repair_shapekeys_mouth(mesh_name, context.scene.wink_left)  # TODO
         else:
-            # print('Repair normal "' + new_right_eye.name + '".')
-            repair_shapekeys(mesh_name, new_right_eye.name)
+            # print('Repair normal "' + new_right_eye_name + '".')
+            repair_shapekeys(mesh_name, new_right_eye_name)
 
         # deleted = []
         # # deleted = checkshapekeys()
