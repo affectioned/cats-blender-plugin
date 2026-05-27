@@ -465,9 +465,10 @@ class FixArmature(bpy.types.Operator):
             bpy.ops.mesh.reveal()
 
         # Remove Bone Groups. Blender 4.0 removed bone_groups in favor of bone collections,
-        # which are managed separately on armature.data.collections.
+        # which are managed separately on armature.data.collections. Snapshot via list() because
+        # iterating a bpy_prop_collection while calling .remove() on it skips every other entry.
         if hasattr(armature.pose, 'bone_groups'):
-            for group in armature.pose.bone_groups:
+            for group in list(armature.pose.bone_groups):
                 armature.pose.bone_groups.remove(group)
 
         # Bone constraints should be deleted

@@ -80,9 +80,11 @@ def autodetect_passes(self, context, tricount, is_desktop):
     context.scene.bake_pass_smoothness = (any([node.inputs["Roughness"].is_linked for node in bsdf_nodes])
                                           or len(set([node.inputs["Roughness"].default_value for node in bsdf_nodes])) > 1)
 
-    # Emit: similar to diffuse
-    context.scene.bake_pass_emit = (any([_get_emission_input(node).is_linked for node in bsdf_nodes])
-                                    or len(set([_get_emission_input(node).default_value[:] for node in bsdf_nodes])) > 1)
+    # Emit: similar to diffuse. _get_emission_input can return None if a future Blender further
+    # renames the emission socket; filter those out rather than crashing autodetect.
+    emission_sockets = [s for s in (_get_emission_input(node) for node in bsdf_nodes) if s is not None]
+    context.scene.bake_pass_emit = (any(s.is_linked for s in emission_sockets)
+                                    or len(set(s.default_value[:] for s in emission_sockets)) > 1)
 
     # Transparency: similar to diffuse
     context.scene.bake_pass_alpha = is_desktop and (any([node.inputs["Alpha"].is_linked for node in bsdf_nodes])
@@ -964,8 +966,10 @@ class BakeButton(bpy.types.Operator):
                     continue
                 try:
                     bsdfinput.default_value = src_input.default_value
-                except (TypeError, AttributeError):
-                    pass
+                except TypeError:
+                    # Type changed between Blender versions (e.g. Sheen Tint went from scalar
+                    # to color in 4.0). Log so the data loss is visible during debugging.
+                    print("CATS bake: skipped copying default for socket '{}' (type mismatch)".format(bsdfinput.identifier))
         if pass_normal:
             normaltexnode = tree.nodes.new("ShaderNodeTexImage")
             if use_decimation:
@@ -1115,7 +1119,9 @@ class BakeButton(bpy.types.Operator):
             emittexnode.image = bpy.data.images["SCRIPT_emission.png"]
             emittexnode.location.x -= 800
             emittexnode.location.y -= 150
-            tree.links.new(_get_emission_input(bsdfnode), emittexnode.outputs["Color"])
+            em_socket = _get_emission_input(bsdfnode)
+            if em_socket is not None:
+                tree.links.new(em_socket, emittexnode.outputs["Color"])
 
         # Rebake diffuse to vertex colors: Incorperates AO
         if pass_diffuse and diffuse_vertex_colors:

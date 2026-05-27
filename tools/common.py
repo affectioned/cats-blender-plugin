@@ -104,6 +104,15 @@ def get_objects():
     return bpy.context.scene.objects if version_2_79_or_older() else bpy.context.view_layer.objects
 
 
+def iter_objects():
+    # Iterate scene objects safely. view_layer.objects on Blender 4.x can yield None for slots
+    # whose object was just removed (e.g. during a delete-while-iterating pattern), so callers
+    # that read attributes on each yielded item should iterate this generator instead.
+    for obj in get_objects():
+        if obj is not None:
+            yield obj
+
+
 class SavedData:
     __object_properties = {}
     __active_object = None
@@ -227,7 +236,8 @@ def unhide_all_of(obj_to_unhide=None):
 
 
 def unselect_all():
-    for obj in get_objects():
+    # Use iter_objects so we don't observe None slots after a concurrent delete.
+    for obj in iter_objects():
         select(obj, False)
 
 
@@ -1548,7 +1558,7 @@ def delete_zero_weight(armature_name=None, ignore=''):
 
 def remove_unused_objects():
     default_scene_objects = []
-    for obj in get_objects():
+    for obj in iter_objects():
         if (obj.type == 'CAMERA' and obj.name == 'Camera') \
                 or (obj.type == 'LAMP' and obj.name == 'Lamp') \
                 or (obj.type == 'LIGHT' and obj.name == 'Light') \
@@ -1562,7 +1572,8 @@ def remove_unused_objects():
 
 def remove_no_user_objects():
     # print('\nREMOVE OBJECTS')
-    for block in get_objects():
+    # Snapshot via list() so concurrent deletes don't shift the iterator under us.
+    for block in list(iter_objects()):
         # print(block.name, block.users)
         if block.users == 0:
             print('Removing obj ', block.name)
@@ -1830,6 +1841,13 @@ def mix_weights(mesh, vg_from, vg_to, mix_strength=1.0, mix_mode='ADD', delete_o
 
 def get_user_preferences():
     return bpy.context.user_preferences if hasattr(bpy.context, 'user_preferences') else bpy.context.preferences
+
+
+def invoke_props_dialog_dpi(operator, context, width_multiplier):
+    # Wrapper for WindowManager.invoke_props_dialog that scales width by the system DPI and
+    # casts to int (Blender 4.x rejects float widths with TypeError).
+    dpi_value = get_user_preferences().system.dpi
+    return context.window_manager.invoke_props_dialog(operator, width=int(dpi_value * width_multiplier))
 
 
 def has_shapekeys(mesh):
