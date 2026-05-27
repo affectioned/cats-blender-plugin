@@ -32,6 +32,11 @@ from .register import register_wrap
 from .translations import t
 
 
+def _get_emission_input(node):
+    # Blender 4.0 split the Principled BSDF "Emission" input into "Emission Color" + "Emission Strength".
+    return node.inputs.get("Emission Color") or node.inputs["Emission"]
+
+
 @register_wrap
 class BakeTutorialButton(bpy.types.Operator):
     bl_idname = 'cats_bake.tutorial'
@@ -76,8 +81,8 @@ def autodetect_passes(self, context, tricount, is_desktop):
                                           or len(set([node.inputs["Roughness"].default_value for node in bsdf_nodes])) > 1)
 
     # Emit: similar to diffuse
-    context.scene.bake_pass_emit = (any([node.inputs["Emission"].is_linked for node in bsdf_nodes])
-                                    or len(set([node.inputs["Emission"].default_value[:] for node in bsdf_nodes])) > 1)
+    context.scene.bake_pass_emit = (any([_get_emission_input(node).is_linked for node in bsdf_nodes])
+                                    or len(set([_get_emission_input(node).default_value[:] for node in bsdf_nodes])) > 1)
 
     # Transparency: similar to diffuse
     context.scene.bake_pass_alpha = is_desktop and (any([node.inputs["Alpha"].is_linked for node in bsdf_nodes])
@@ -1063,7 +1068,7 @@ class BakeButton(bpy.types.Operator):
             emittexnode.image = bpy.data.images["SCRIPT_emission.png"]
             emittexnode.location.x -= 800
             emittexnode.location.y -= 150
-            tree.links.new(bsdfnode.inputs["Emission"], emittexnode.outputs["Color"])
+            tree.links.new(_get_emission_input(bsdfnode), emittexnode.outputs["Color"])
 
         # Rebake diffuse to vertex colors: Incorperates AO
         if pass_diffuse and diffuse_vertex_colors:
@@ -1115,10 +1120,13 @@ class BakeButton(bpy.types.Operator):
                 if mesh.type == 'MESH' and mesh.data.shape_keys is not None:
                     context.view_layer.objects.active = mesh
 
-                    # Ensure auto-smooth is enabled, set custom normals from faces
-                    if not mesh.data.use_auto_smooth:
-                        mesh.data.use_auto_smooth = True
-                        mesh.data.auto_smooth_angle = 3.1416
+                    # Ensure auto-smooth is enabled, set custom normals from faces.
+                    # In Blender 4.0+ use_auto_smooth/auto_smooth_angle were removed and
+                    # custom split normals are honored unconditionally, so this is a no-op there.
+                    if hasattr(mesh.data, 'use_auto_smooth'):
+                        if not mesh.data.use_auto_smooth:
+                            mesh.data.use_auto_smooth = True
+                            mesh.data.auto_smooth_angle = 3.1416
 
                     bpy.ops.object.mode_set(mode = 'EDIT')
                     bpy.ops.mesh.select_mode(type="VERT")

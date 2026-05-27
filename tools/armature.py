@@ -290,7 +290,7 @@ class FixArmature(bpy.types.Operator):
                     for i in get_current_layers:
                         if child2.layers[i]:
                             in_layer = True
-                    if not in_layer:
+                    if not in_layer and hasattr(bpy.context.scene, 'layers'):
                         Common.delete(child2)
 
                 if child.type != 'MESH':
@@ -464,9 +464,11 @@ class FixArmature(bpy.types.Operator):
         if bpy.ops.mesh.reveal.poll():
             bpy.ops.mesh.reveal()
 
-        # Remove Bone Groups
-        for group in armature.pose.bone_groups:
-            armature.pose.bone_groups.remove(group)
+        # Remove Bone Groups. Blender 4.0 removed bone_groups in favor of bone collections,
+        # which are managed separately on armature.data.collections.
+        if hasattr(armature.pose, 'bone_groups'):
+            for group in armature.pose.bone_groups:
+                armature.pose.bone_groups.remove(group)
 
         # Bone constraints should be deleted
         # if context.scene.remove_constraints:
@@ -483,7 +485,10 @@ class FixArmature(bpy.types.Operator):
                     steps += 1
                 else:
                     steps -= 1
-            bone.layers[0] = True
+            # Blender 4.0 removed bone.layers in favor of bone collections; on 4.0+ bones are
+            # visible by default, so a no-op here matches the pre-4.0 intent.
+            if hasattr(bone, 'layers'):
+                bone.layers[0] = True
 
         # Start loading bar
         current_step = 0

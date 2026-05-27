@@ -209,6 +209,9 @@ def get_active():
 
 
 def select(obj, sel=True):
+    # Blender 4.x's view_layer.objects can yield None for slots whose object was just removed.
+    if obj is None:
+        return
     if sel:
         hide(obj, False)
     if version_2_79_or_older():

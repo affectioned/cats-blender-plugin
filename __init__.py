@@ -316,7 +316,12 @@ def register():
     else:
         pass  # From 2.83 on this is no longer needed
     tools.common.get_user_preferences().filepaths.use_file_compression = True
-    bpy.context.window_manager.addon_support = {'OFFICIAL', 'COMMUNITY', 'TESTING'}
+    # Blender 4.2 removed the 'TESTING' addon support category when the extensions system shipped.
+    # Filter to whatever the enum actually accepts on this Blender version.
+    _addon_support_prop = bpy.types.WindowManager.bl_rna.properties.get('addon_support')
+    if _addon_support_prop is not None:
+        _valid = {item.identifier for item in _addon_support_prop.enum_items}
+        bpy.context.window_manager.addon_support = {'OFFICIAL', 'COMMUNITY', 'TESTING'} & _valid
 
     # Add shapekey button to shapekey menu
     if hasattr(bpy.types, 'MESH_MT_shape_key_specials'):  # pre 2.80
