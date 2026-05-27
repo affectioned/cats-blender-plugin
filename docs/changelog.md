@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.21.0 — 2026-05-27 (this fork)
+
+- Updater: point release/dev URLs at the affectioned fork
+  
 ## 0.20.0 — 2026-05-27 (this fork)
 
 Compatibility work for Blender 4.0–4.2 LTS. Original upstream targets 2.93.
