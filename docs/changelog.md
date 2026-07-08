@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.21.1 — 2026-07-08 (this fork)
+
+PMX import compatibility fixes for Blender 4.0–4.2 LTS. The prior 0.20.0 pass only guarded the addon's own code; the bundled `mmd_tools_local` (an older upstream snapshot) still hit several removed APIs mid-import.
+
+- `extern_tools/mmd_tools_local/core/shader.py`: Migrated `_NodeGroupUtils.new_input_socket` / `new_output_socket` off `NodeTree.inputs` / `NodeTree.outputs` (removed in 4.0) to `NodeTree.interface.new_socket()`. Without this, MMD shader groups were built with no interface sockets, so material import crashed with `KeyError: 'Shader'` when trying to link the group's output. Also normalizes subtype socket ids (e.g. `NodeSocketFloatFactor` → `NodeSocketFloat`) since the interface API only accepts the six base types.
+- `extern_tools/mmd_tools_local/core/material.py`: `__get_shader` / `__get_shader_uv` now verify the expected output socket exists on cached `MMDShaderDev` / `MMDTexUV` groups. Prior failed imports left partial groups behind with nodes but no interface sockets, which the length-based check happily returned; the group is now cleared and rebuilt.
+- `extern_tools/mmd_tools_local/core/pmx/importer.py` + `extern_tools/mmd_tools_local/utils.py`: Guarded `Mesh.use_auto_smooth` behind `hasattr` — removed in 4.1, custom split normals are honored unconditionally there. Fixes `AttributeError: 'Mesh' object has no attribute 'use_auto_smooth'` at the end of PMX import.
+- `extern_tools/mmd_tools_local/bpyutils.py`: New `assign_bone_to_layer(armature_data, bone, layer_index)` compat helper. Uses `Bone.layers` on <4.0 and `Armature.collections` on 4.0+ (creates hidden `mmd_layer_N` collections). Called from `core/bone.py` (dummy/shadow helper bones) and `core/morph.py` (morph bind bones). Fixes `AttributeError: 'EditBone' object has no attribute 'layers'` during `apply_additional_transformation`.
+- `tools/common.py` `fix_bone_orientations`: Guard `bone.parent.children` behind a `bone.parent is not None` check. Root bones triggered `AttributeError: 'NoneType' object has no attribute 'children'` when Fix Model ran after import.
+
 ## 0.21.0 — 2026-05-27 (this fork)
 
 - Updater: point release/dev URLs at the affectioned fork

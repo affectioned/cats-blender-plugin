@@ -372,11 +372,13 @@ class _AT_ShadowBoneCreate:
             _AT_ShadowBoneRemove(self.__bone_name).update_edit_bones(edit_bones)
             return
 
+        armature_data = edit_bones.id_data
+
         dummy_bone_name = self.__dummy_bone_name
         dummy = edit_bones.get(dummy_bone_name, None)
         if dummy is None:
             dummy = edit_bones.new(name=dummy_bone_name)
-            dummy.layers = [x == 9 for x in range(len(dummy.layers))]
+            bpyutils.assign_bone_to_layer(armature_data, dummy, 9)
             dummy.use_deform = False
         dummy.parent = target_bone
         dummy.head = target_bone.head
@@ -387,7 +389,7 @@ class _AT_ShadowBoneCreate:
         shadow = edit_bones.get(shadow_bone_name, None)
         if shadow is None:
             shadow = edit_bones.new(name=shadow_bone_name)
-            shadow.layers = [x == 8 for x in range(len(shadow.layers))]
+            bpyutils.assign_bone_to_layer(armature_data, shadow, 8)
             shadow.use_deform = False
         shadow.parent = target_bone.parent
         shadow.head = dummy.head

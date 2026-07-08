@@ -405,7 +405,7 @@ class _MorphSlider:
             edit_bones = data.edit_bones
             def __get_bone(name, layer, parent):
                 b = edit_bones.get(name, None) or edit_bones.new(name=name)
-                b.layers = [x == layer for x in range(len(b.layers))]
+                bpyutils.assign_bone_to_layer(edit_bones.id_data, b, layer)
                 b.head = (0, 0, 0)
                 b.tail = (0, 0, 1)
                 b.use_deform = False

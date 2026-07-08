@@ -4,6 +4,24 @@ import bpy
 
 matmul = (lambda a, b: a*b) if bpy.app.version < (2, 80, 0) else (lambda a, b: a.__matmul__(b))
 
+
+def assign_bone_to_layer(armature_data, bone, layer_index):
+    """Put ``bone`` on the equivalent of the old fixed ``layer_index`` (0-31).
+
+    Blender 4.0 removed ``Bone.layers`` / ``EditBone.layers`` in favor of
+    ``Armature.collections``. This wraps both eras behind the same call so
+    callers don't need version checks. Collections created here are hidden by
+    default to match the "helper bone" intent (dummy/shadow/morph bones).
+    """
+    if hasattr(bone, 'layers'):
+        bone.layers = [x == layer_index for x in range(len(bone.layers))]
+        return
+    col_name = 'mmd_layer_%d' % layer_index
+    col = armature_data.collections.get(col_name) or armature_data.collections.new(col_name)
+    if hasattr(col, 'is_visible'):
+        col.is_visible = False
+    col.assign(bone)
+
 class __EditMode:
     def __init__(self, obj):
         if not isinstance(obj, bpy.types.Object):

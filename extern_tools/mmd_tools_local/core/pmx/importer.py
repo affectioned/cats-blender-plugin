@@ -789,7 +789,9 @@ class PMXImporter:
         else:
             custom_normals = [(Vector(v.normal).xzy).normalized() for v in self.__model.vertices]
             mesh.normals_split_custom_set_from_vertices(custom_normals)
-        mesh.use_auto_smooth = True
+        # Removed in Blender 4.1 — custom split normals are honored unconditionally on 4.1+.
+        if hasattr(mesh, 'use_auto_smooth'):
+            mesh.use_auto_smooth = True
         logging.info('   - Done!!')
 
     def __renameLRBones(self, use_underscore):

@@ -87,7 +87,9 @@ def mergeVertexGroup(meshObj, src_vertex_group_name, dest_vertex_group_name):
             pass
 
 def __getCustomNormalKeeper(mesh):
-    if hasattr(mesh, 'has_custom_normals') and mesh.use_auto_smooth:
+    # Blender 4.1+ dropped Mesh.use_auto_smooth; custom split normals are always honored there.
+    _uses_auto_smooth = getattr(mesh, 'use_auto_smooth', True)
+    if hasattr(mesh, 'has_custom_normals') and _uses_auto_smooth:
         import bpy
         class _CustomNormalKeeper:
             def __init__(self, mesh):

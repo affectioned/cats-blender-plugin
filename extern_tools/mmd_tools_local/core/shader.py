@@ -75,26 +75,54 @@ class _NodeGroupUtils(_NodeTreeUtils):
                     s.hide = not s.is_linked
 
     def new_input_socket(self, io_name, socket, default_val=None, min_max=None):
-        self.__new_io(self.shader.inputs, self.node_input.outputs, io_name, socket, default_val, min_max)
+        self.__new_io('INPUT', self.node_input.outputs, io_name, socket, default_val, min_max)
 
     def new_output_socket(self, io_name, socket, default_val=None, min_max=None):
-        self.__new_io(self.shader.outputs, self.node_output.inputs, io_name, socket, default_val, min_max)
+        self.__new_io('OUTPUT', self.node_output.inputs, io_name, socket, default_val, min_max)
 
-    def __new_io(self, shader_io, io_sockets, io_name, socket, default_val=None, min_max=None):
+    def __get_interface_item(self, in_out, io_name):
+        # Blender 4.0+ tree-interface accessor. Returns the socket item so we can
+        # read/write default_value / min_value / max_value regardless of API era.
+        if bpy.app.version >= (4, 0, 0):
+            for item in self.shader.interface.items_tree:
+                if getattr(item, 'item_type', 'SOCKET') == 'SOCKET' and item.in_out == in_out and item.name == io_name:
+                    return item
+            return None
+        shader_io = self.shader.inputs if in_out == 'INPUT' else self.shader.outputs
+        return shader_io.get(io_name)
+
+    def __create_interface_socket(self, in_out, io_name, bl_idname):
+        if bpy.app.version >= (4, 0, 0):
+            # interface.new_socket() only accepts base socket types (e.g. NodeSocketFloat),
+            # not the subtype bl_idnames a node's socket may report (e.g. NodeSocketFloatFactor).
+            base_type = bl_idname
+            for prefix in ('NodeSocketFloat', 'NodeSocketVector', 'NodeSocketInt'):
+                if bl_idname.startswith(prefix) and bl_idname != prefix:
+                    base_type = prefix
+                    break
+            return self.shader.interface.new_socket(name=io_name, in_out=in_out, socket_type=base_type)
+        shader_io = self.shader.inputs if in_out == 'INPUT' else self.shader.outputs
+        shader_io.new(type=bl_idname, name=io_name)
+        return shader_io[io_name]
+
+    def __new_io(self, in_out, io_sockets, io_name, socket, default_val=None, min_max=None):
         if io_name not in io_sockets:
-            shader_io.new(type=socket.bl_idname, name=io_name)
+            item = self.__create_interface_socket(in_out, io_name, socket.bl_idname)
             if not min_max:
                 idname = socket.bl_idname
                 if idname.endswith('Factor') or io_name.endswith('Alpha'):
-                    shader_io[io_name].min_value, shader_io[io_name].max_value = 0, 1
+                    item.min_value, item.max_value = 0, 1
                 elif idname.endswith('Float') or idname.endswith('Vector'):
-                    shader_io[io_name].min_value, shader_io[io_name].max_value = -10, 10
+                    item.min_value, item.max_value = -10, 10
+        else:
+            item = self.__get_interface_item(in_out, io_name)
 
         self.links.new(io_sockets[io_name], socket)
-        if default_val is not None:
-            shader_io[io_name].default_value = default_val
-        if min_max is not None:
-            shader_io[io_name].min_value, shader_io[io_name].max_value = min_max
+        if item is not None:
+            if default_val is not None:
+                item.default_value = default_val
+            if min_max is not None:
+                item.min_value, item.max_value = min_max
 
 
 class _MaterialMorph:

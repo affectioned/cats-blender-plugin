@@ -13,6 +13,19 @@ SPHERE_MODE_MULT   = 1
 SPHERE_MODE_ADD    = 2
 SPHERE_MODE_SUBTEX = 3
 
+
+def _has_group_socket(node_tree, in_out, name):
+    # Blender 4.0+ exposes group sockets via NodeTree.interface. Older versions
+    # exposed them as NodeTree.inputs / NodeTree.outputs. Return True if the
+    # given socket already exists on the tree.
+    if bpy.app.version >= (4, 0, 0):
+        for item in node_tree.interface.items_tree:
+            if getattr(item, 'item_type', 'SOCKET') == 'SOCKET' and item.in_out == in_out and item.name == name:
+                return True
+        return False
+    io = node_tree.inputs if in_out == 'INPUT' else node_tree.outputs
+    return name in io
+
 class _FnMaterialBI:
     __BASE_TEX_SLOT = 0
     __TOON_TEX_SLOT = 1
@@ -681,8 +694,9 @@ class _FnMaterialCycles(_FnMaterialBI):
     def __get_shader_uv(self):
         group_name = 'MMDTexUV'
         shader = bpy.data.node_groups.get(group_name, None) or bpy.data.node_groups.new(name=group_name, type='ShaderNodeTree')
-        if len(shader.nodes):
+        if len(shader.nodes) and _has_group_socket(shader, 'OUTPUT', 'Base UV'):
             return shader
+        shader.nodes.clear()
 
         ng = _NodeGroupUtils(shader)
 
@@ -726,8 +740,9 @@ class _FnMaterialCycles(_FnMaterialBI):
     def __get_shader(self):
         group_name = 'MMDShaderDev'
         shader = bpy.data.node_groups.get(group_name, None) or bpy.data.node_groups.new(name=group_name, type='ShaderNodeTree')
-        if len(shader.nodes):
+        if len(shader.nodes) and _has_group_socket(shader, 'OUTPUT', 'Shader'):
             return shader
+        shader.nodes.clear()
 
         ng = _NodeGroupUtils(shader)
 
